@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 #
-# tech-team install script
+# Nightshift AI install script
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/FernandoAFaria/ai-org-orchestrator/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/FernandoAFaria/nightshift-ai/master/install.sh | bash
 #
 # What this does:
 #   1. Checks/installs Bun (required runtime)
 #   2. Detects platform (linux/darwin, x64/arm64)
 #   3. Downloads pre-built tarball from GitHub Releases
-#   4. Extracts to ~/.ai-org/
+#   4. Extracts to ~/.nightshift-ai/
 #   5. Runs database migrations + seed
-#   6. Symlinks bin/ai-org to /usr/local/bin/ai-org
+#   6. Adds bin/ directory to your shell PATH (~/.bashrc, ~/.zshrc, etc.)
 #   7. Prints next steps
+#
+# No system files are modified — everything stays in your home directory.
 #
 
 set -euo pipefail
@@ -21,9 +23,8 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
-REPO="FernandoAFaria/ai-org-orchestrator"
-INSTALL_DIR="${AI_ORG_HOME:-$HOME/.ai-org}"
-BIN_LINK="/usr/local/bin/ai-org"
+REPO="FernandoAFaria/nightshift-ai"
+INSTALL_DIR="${NIGHTSHIFT_HOME:-$HOME/.nightshift-ai}"
 
 # ---------------------------------------------------------------------------
 # Colors
@@ -51,8 +52,8 @@ banner() {
   echo ""
   echo -e "${BOLD}${CYAN}"
   echo "  ┌─────────────────────────────────────┐"
-  echo "  │     AI Team Orchestration            │"
-  echo "  │     Install Script                   │"
+  echo "  │     Nightshift AI                   │"
+  echo "  │     Install Script                  │"
   echo "  └─────────────────────────────────────┘"
   echo -e "${RESET}"
 }
@@ -72,7 +73,7 @@ detect_platform() {
     darwin) ;;
     *)
       error "Unsupported operating system: $os"
-      error "ai-org supports Linux and macOS only."
+      error "Nightshift supports Linux and macOS only."
       exit 1
       ;;
   esac
@@ -82,14 +83,14 @@ detect_platform() {
     aarch64|arm64) arch="arm64" ;;
     *)
       error "Unsupported architecture: $arch"
-      error "ai-org supports x86_64 and ARM64 only."
+      error "Nightshift supports x86_64 and ARM64 only."
       exit 1
       ;;
   esac
 
   PLATFORM_OS="$os"
   PLATFORM_ARCH="$arch"
-  ASSET_NAME="ai-org-${os}-${arch}.tar.gz"
+  ASSET_NAME="nightshift-${os}-${arch}.tar.gz"
 }
 
 # ---------------------------------------------------------------------------
@@ -215,8 +216,8 @@ download_and_extract() {
   info "  Extracting..."
   tar -xzf "$tmp_dir/$ASSET_NAME" -C "$tmp_dir"
 
-  # The tarball extracts to an ai-org/ directory
-  local extracted_dir="$tmp_dir/ai-org"
+  # The tarball extracts to a nightshift/ directory
+  local extracted_dir="$tmp_dir/nightshift"
   if [ ! -d "$extracted_dir" ]; then
     # Fallback: contents may be at top level of tarball
     extracted_dir="$tmp_dir"
@@ -258,7 +259,7 @@ download_and_extract() {
   fi
 
   # Make CLI executable
-  chmod +x "$INSTALL_DIR/bin/ai-org"
+  chmod +x "$INSTALL_DIR/bin/nightshift"
 
   success "  Installed to $INSTALL_DIR"
 }
@@ -315,31 +316,49 @@ setup_database() {
   fi
 }
 
-create_symlink() {
-  step "Creating symlink..."
+configure_shell_path() {
+  step "Configuring shell PATH..."
 
-  local target="$INSTALL_DIR/bin/ai-org"
-  local link="$BIN_LINK"
+  local bin_dir="$INSTALL_DIR/bin"
+  local path_entry="export PATH=\"$bin_dir:\$PATH\""
+  local shell_configs=()
+  local configured=false
 
-  # Check if we can write to /usr/local/bin
-  if [ -w "$(dirname "$link")" ]; then
-    ln -sf "$target" "$link"
-    success "  Linked $link -> $target"
-  elif command -v sudo &>/dev/null; then
-    info "  Need sudo to create symlink in $(dirname "$link")"
-    sudo ln -sf "$target" "$link"
-    success "  Linked $link -> $target"
-  else
-    warn "  Could not create symlink at $link"
-    warn "  Add this to your PATH manually:"
-    warn "    export PATH=\"$INSTALL_DIR/bin:\$PATH\""
-    MANUAL_PATH=true
+  # Collect existing shell config files
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+    if [ -f "$rc" ]; then
+      shell_configs+=("$rc")
+    fi
+  done
+
+  # If no shell configs found, create .bashrc as a sensible default
+  if [ ${#shell_configs[@]} -eq 0 ]; then
+    shell_configs=("$HOME/.bashrc")
+  fi
+
+  for rc in "${shell_configs[@]}"; do
+    if grep -qF "$bin_dir" "$rc" 2>/dev/null; then
+      success "  PATH already configured in $(basename "$rc")"
+      configured=true
+    else
+      echo "" >> "$rc"
+      echo "# Nightshift AI" >> "$rc"
+      echo "$path_entry" >> "$rc"
+      success "  Added to $(basename "$rc")"
+      configured=true
+    fi
+  done
+
+  if [ "$configured" = true ]; then
+    SHELL_CONFIGS_MODIFIED=("${shell_configs[@]}")
   fi
 }
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+SHELL_CONFIGS_MODIFIED=()
 
 main() {
   banner
@@ -360,7 +379,7 @@ main() {
   # Setup
   install_dependencies
   setup_database
-  create_symlink
+  configure_shell_path
 
   # Done
   echo ""
@@ -374,16 +393,16 @@ main() {
   info "  Location:  $INSTALL_DIR"
   echo ""
 
-  if [ "${MANUAL_PATH:-}" = "true" ]; then
-    warn "  Add to your PATH first:"
-    echo "    export PATH=\"$INSTALL_DIR/bin:\$PATH\""
+  if [ ${#SHELL_CONFIGS_MODIFIED[@]:-0} -gt 0 ]; then
+    info "  Restart your shell or run:"
+    echo "    source ${SHELL_CONFIGS_MODIFIED[0]}"
     echo ""
   fi
 
   echo "  Get started:"
   echo ""
-  echo "    ai-org                 Start the application"
-  echo "    ai-org help            Show all commands"
+  echo "    nightshift                 Start the application"
+  echo "    nightshift help            Show all commands"
   echo ""
   echo -e "  ${DIM}The setup wizard will open at http://localhost:8989/setup${RESET}"
   echo -e "  ${DIM}to configure your API keys on first run.${RESET}"
