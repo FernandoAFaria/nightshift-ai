@@ -394,8 +394,12 @@ main() {
   echo ""
 
   if [ ${#SHELL_CONFIGS_MODIFIED[@]} -gt 0 ]; then
-    info "  Restart your shell or run:"
+    echo ""
+    info "  IMPORTANT: Restart your terminal or run:"
     echo "    source ${SHELL_CONFIGS_MODIFIED[0]}"
+    echo ""
+    echo "  Then start Nightshift with:"
+    echo "    nightshift"
     echo ""
   fi
 
