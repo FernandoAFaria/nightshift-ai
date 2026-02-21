@@ -393,7 +393,7 @@ main() {
   info "  Location:  $INSTALL_DIR"
   echo ""
 
-  if [ ${#SHELL_CONFIGS_MODIFIED[@]:-0} -gt 0 ]; then
+  if [ ${#SHELL_CONFIGS_MODIFIED[@]} -gt 0 ]; then
     info "  Restart your shell or run:"
     echo "    source ${SHELL_CONFIGS_MODIFIED[0]}"
     echo ""
